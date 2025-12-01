@@ -22,7 +22,7 @@ data:
       placeholder: placeholder
     turn:
       enabled: true
-      domain: turn.yourdomain.com  # Update with your domain
+      domain: turn.{{DOMAIN}}
       # TURN/TLS port - should be 443 for firewall-friendly access
       tls_port: 5349
       # TURN/UDP port for better performance
@@ -46,7 +46,7 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - turn.yourdomain.com  # Update with your domain
+    - turn.{{DOMAIN}}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -215,10 +215,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - livekit.yourdomain.com  # Update with your domain
+        - livekit.{{DOMAIN}}
       secretName: livekit-tls
   rules:
-    - host: livekit.yourdomain.com  # Update with your domain
+    - host: livekit.{{DOMAIN}}
       http:
         paths:
           - path: /
