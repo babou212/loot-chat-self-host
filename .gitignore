@@ -11,9 +11,8 @@ terraform/tfplan
 k8s/secrets.yaml
 k8s/.sops.yaml
 
-# Generated Kubernetes manifests (from templates)
-k8s/ingress.yaml
-k8s/configmap.yaml
+# Temporary generated files (generated at deploy time)
+k8s/*.generated.yaml
 
 # Environment Files
 .env

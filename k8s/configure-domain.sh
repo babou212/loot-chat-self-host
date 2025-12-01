@@ -2,7 +2,8 @@
 set -e
 
 # Script to configure domain-specific Kubernetes resources from secrets
-# This script reads the DOMAIN from secrets.yaml and substitutes it into templates
+# This script reads the DOMAIN from secrets.yaml and substitutes it into manifests
+# It works directly with the committed files and generates temporary versions
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$SCRIPT_DIR"
@@ -52,14 +53,20 @@ if [[ "$USE_SOPS" == "true" ]]; then
         exit 1
     fi
     DOMAIN=$(sops -d "$K8S_DIR/secrets.yaml" | grep "^\s*DOMAIN:" | awk '{print $2}' | tr -d '"' | tr -d "'")
-    EMAIL=$(sops -d "$K8S_DIR/secrets.yaml" | grep "^\s*ADMIN_EMAIL:" | awk '{print $2}' | tr -d '"' | tr -d "'")
+    ADMIN_EMAIL=$(sops -d "$K8S_DIR/secrets.yaml" | grep "^\s*ADMIN_EMAIL:" | awk '{print $2}' | tr -d '"' | tr -d "'" || echo "")
+    MAIL_USERNAME=$(sops -d "$K8S_DIR/secrets.yaml" | grep "^\s*MAIL_USERNAME:" | awk '{print $2}' | tr -d '"' | tr -d "'" || echo "")
 else
     DOMAIN=$(grep "^\s*DOMAIN:" "$K8S_DIR/secrets.yaml" | awk '{print $2}' | tr -d '"' | tr -d "'")
-    EMAIL=$(grep "^\s*ADMIN_EMAIL:" "$K8S_DIR/secrets.yaml" | awk '{print $2}' | tr -d '"' | tr -d "'")
+    ADMIN_EMAIL=$(grep "^\s*ADMIN_EMAIL:" "$K8S_DIR/secrets.yaml" | awk '{print $2}' | tr -d '"' | tr -d "'" || echo "")
+    MAIL_USERNAME=$(grep "^\s*MAIL_USERNAME:" "$K8S_DIR/secrets.yaml" | awk '{print $2}' | tr -d '"' | tr -d "'" || echo "")
 fi
 
-# Fallback for email if not found
-if [ -z "$EMAIL" ]; then
+# Determine email to use (prefer MAIL_USERNAME, fallback to ADMIN_EMAIL or construct from domain)
+if [ -n "$MAIL_USERNAME" ]; then
+    EMAIL="$MAIL_USERNAME"
+elif [ -n "$ADMIN_EMAIL" ]; then
+    EMAIL="$ADMIN_EMAIL"
+else
     EMAIL="admin@${DOMAIN}"
 fi
 
@@ -71,47 +78,28 @@ fi
 print_info "Domain: $DOMAIN"
 print_info "Email: $EMAIL"
 
-# Process ingress.yaml
-if [ -f "$K8S_DIR/ingress.yaml.template" ]; then
-    print_info "Generating ingress.yaml from template..."
-    sed -e "s/{{DOMAIN}}/$DOMAIN/g" \
-        -e "s/{{EMAIL}}/$EMAIL/g" \
-        "$K8S_DIR/ingress.yaml.template" > "$K8S_DIR/ingress.yaml"
-    print_info "✓ ingress.yaml generated"
-else
-    print_error "ingress.yaml.template not found!"
-    exit 1
-fi
+# Process manifests with placeholders
+print_info "Generating domain-configured manifests..."
 
-# Process configmap.yaml
-if [ -f "$K8S_DIR/configmap.yaml.template" ]; then
-    print_info "Generating configmap.yaml from template..."
-    sed -e "s/{{DOMAIN}}/$DOMAIN/g" \
-        "$K8S_DIR/configmap.yaml.template" > "$K8S_DIR/configmap.yaml"
-    print_info "✓ configmap.yaml generated"
-else
-    print_error "configmap.yaml.template not found!"
-    exit 1
-fi
-
-# Process livekit.yaml if it has templates
-if [ -f "$K8S_DIR/livekit.yaml" ]; then
-    if grep -q "{{DOMAIN}}" "$K8S_DIR/livekit.yaml" 2>/dev/null; then
-        print_info "Updating livekit.yaml with domain..."
-        sed -i.bak "s/{{DOMAIN}}/$DOMAIN/g" "$K8S_DIR/livekit.yaml"
-        rm -f "$K8S_DIR/livekit.yaml.bak"
-        print_info "✓ livekit.yaml updated"
+for file in ingress.yaml configmap.yaml livekit.yaml; do
+    if [ -f "$K8S_DIR/$file" ]; then
+        if grep -q "{{DOMAIN}}\|{{EMAIL}}" "$K8S_DIR/$file" 2>/dev/null; then
+            print_info "Processing $file..."
+            sed -e "s/{{DOMAIN}}/$DOMAIN/g" \
+                -e "s/{{EMAIL}}/$EMAIL/g" \
+                "$K8S_DIR/$file" > "$K8S_DIR/${file%.yaml}.generated.yaml"
+            print_info "✓ ${file%.yaml}.generated.yaml created"
+        fi
     fi
-fi
+done
 
 echo ""
 print_info "Domain configuration complete!"
 echo ""
-echo "Generated files:"
-echo "  - ingress.yaml (domain: $DOMAIN)"
-echo "  - configmap.yaml (LiveKit: livekit.$DOMAIN, MinIO: minio.$DOMAIN)"
+echo "Generated files (temporary, not in git):"
+ls -1 "$K8S_DIR"/*.generated.yaml 2>/dev/null | sed 's/.*\//  - /' || echo "  (none)"
 echo ""
-echo "Next steps:"
-echo "  1. Review the generated files"
-echo "  2. Apply to Kubernetes: kubectl apply -f $K8S_DIR/"
+echo "To apply:"
+echo "  kubectl apply -f $K8S_DIR/*.generated.yaml"
+echo "  kubectl apply -f $K8S_DIR/ --exclude='*.generated.yaml'"
 echo ""

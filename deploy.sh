@@ -282,8 +282,11 @@ deploy_lootchat() {
         kubectl apply -f secrets.yaml
     fi
     
-    # Apply configmap
-    if [ -f "configmap.yaml" ]; then
+    # Apply configmap (use generated version if available)
+    if [ -f "configmap.generated.yaml" ]; then
+        print_info "Applying configuration (domain-configured)..."
+        kubectl apply -f configmap.generated.yaml
+    elif [ -f "configmap.yaml" ]; then
         print_info "Applying configuration..."
         kubectl apply -f configmap.yaml
     fi
@@ -346,9 +349,12 @@ deploy_lootchat() {
     print_info "Applying network policies..."
     kubectl apply -f networkpolicy-*.yaml 2>/dev/null || true
     
-    # Apply ingress
+    # Apply ingress (use generated version if available)
     print_info "Configuring ingress..."
-    if [ -f "ingress.yaml" ]; then
+    if [ -f "ingress.generated.yaml" ]; then
+        print_info "Applying ingress (domain-configured)..."
+        kubectl apply -f ingress.generated.yaml
+    elif [ -f "ingress.yaml" ]; then
         kubectl apply -f ingress.yaml
     fi
     
