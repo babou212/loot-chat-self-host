@@ -1,0 +1,32 @@
+# Note: With cert-manager and the ClusterIssuer in ingress.yaml,
+# certificate renewal is handled automatically by cert-manager.
+# This CronJob is provided as an alternative if you prefer to use certbot directly.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: certbot-renewal
+  namespace: lootchat
+spec:
+  schedule: "0 */12 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: certbot
+            image: certbot/certbot:latest
+            command:
+            - certbot
+            - renew
+            volumeMounts:
+            - name: certbot-www
+              mountPath: /var/www/certbot
+            - name: certbot-conf
+              mountPath: /etc/letsencrypt
+          restartPolicy: OnFailure
+          volumes:
+          - name: certbot-www
+            emptyDir: {}
+          - name: certbot-conf
+            emptyDir: {}

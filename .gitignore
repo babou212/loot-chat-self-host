@@ -1,0 +1,43 @@
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfvars
+terraform/.terraform.tfstate.lock.info
+terraform/tfplan
+
+# Kubernetes Secrets
+k8s/secrets.yaml
+k8s/.sops.yaml
+
+# Generated Kubernetes manifests (from templates)
+k8s/ingress.yaml
+k8s/configmap.yaml
+
+# Environment Files
+.env
+.env.local
+.env.production
+examples/.env
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Backup files
+*.backup
+*.bak

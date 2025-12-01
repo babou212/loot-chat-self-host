@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lootchat-config
+  namespace: lootchat
+data:
+  # Backend Configuration
+  SPRING_PROFILES_ACTIVE: "prod"
+  DATABASE_URL: "jdbc:postgresql://lootchat-db:5432/$(POSTGRES_DB)"
+  SERVER_PORT: "8080"
+  FILE_UPLOAD_DIR: "/app/uploads"
+  
+  # Kafka Configuration
+  KAFKA_BOOTSTRAP_SERVERS: "lootchat-kafka:9092"
+  
+  # Redis Configuration
+  SPRING_DATA_REDIS_HOST: "lootchat-redis"
+  SPRING_DATA_REDIS_PORT: "6379"
+  
+  # Mail Configuration
+  MAIL_HOST: "smtp.gmail.com"
+  MAIL_PORT: "587"
+  
+  # App Configuration
+  APP_NAME: "LootChat"
+  
+  # LiveKit Configuration
+  LIVEKIT_URL: "wss://livekit.{{DOMAIN}}"
+  LIVEKIT_PUBLIC_URL: "wss://livekit.{{DOMAIN}}"
+  
+  # MinIO Configuration
+  MINIO_DOMAIN: "minio.{{DOMAIN}}"
+  MINIO_URL: "https://minio.{{DOMAIN}}"
+  
+  # Admin Configuration
+  ADMIN_USERNAME: "admin"
+  ADMIN_EMAIL: "admin@lootchat.local"
+  ADMIN_FIRST_NAME: "System"
+  ADMIN_LAST_NAME: "Administrator"
+  
+  # Frontend Configuration
+  NODE_ENV: "production"
+  NUXT_API_URL: "http://lootchat-backend:8080"
+  
+  # Kafka Environment
+  KAFKA_NODE_ID: "1"
+  KAFKA_PROCESS_ROLES: "broker,controller"
+  KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+  KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://lootchat-kafka:9092"
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+  KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+  KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+  KAFKA_CONTROLLER_QUORUM_VOTERS: "1@lootchat-kafka:9093"
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+  CLUSTER_ID: "5L6g3nShT-eMCtK--X86sw"

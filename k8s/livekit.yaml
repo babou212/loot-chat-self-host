@@ -1,0 +1,316 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: livekit-config
+  namespace: lootchat
+data:
+  config.yaml: |
+    port: 7880
+    rtc:
+      tcp_port: 7881
+      port_range_start: 50000
+      port_range_end: 60000
+      use_external_ip: true
+      # Enable ICE lite for better NAT traversal
+      enable_loopback_candidate: false
+    redis:
+      address: lootchat-redis-0.lootchat-redis:6379
+      password: $(REDIS_PASSWORD)
+    keys:
+      # API key/secret pair - the secret value is injected via LIVEKIT_KEYS env var
+      # Format: key: secret (this is overridden by the environment variable)
+      placeholder: placeholder
+    turn:
+      enabled: true
+      domain: turn.yourdomain.com  # Update with your domain
+      # TURN/TLS port - should be 443 for firewall-friendly access
+      tls_port: 5349
+      # TURN/UDP port for better performance
+      udp_port: 3478
+      # TLS certificate paths (mounted from Kubernetes secret)
+      cert_file: /etc/livekit/turn-tls/tls.crt
+      key_file: /etc/livekit/turn-tls/tls.key
+    logging:
+      level: info
+      pion_level: warn
+---
+# Certificate for TURN/TLS domain
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: livekit-turn-tls
+  namespace: lootchat
+spec:
+  secretName: livekit-turn-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - turn.yourdomain.com  # Update with your domain
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: livekit
+  namespace: lootchat
+  labels:
+    app: livekit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: livekit
+  template:
+    metadata:
+      labels:
+        app: livekit
+    spec:
+      # LiveKit requires host networking for WebRTC UDP ports
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      # Recommended by LiveKit: 5 hours for graceful termination during upgrades
+      # This allows active sessions to drain before pod shutdown
+      terminationGracePeriodSeconds: 18000
+      # Ensure only one LiveKit pod per node (required due to host networking)
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: livekit
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: livekit
+          image: livekit/livekit-server:v1.8
+          args:
+            - "--config=/etc/livekit/config.yaml"
+          ports:
+            - containerPort: 7880
+              name: http
+              protocol: TCP
+            - containerPort: 7881
+              name: rtc-tcp
+              protocol: TCP
+            # TURN UDP port
+            - containerPort: 3478
+              name: turn-udp
+              protocol: UDP
+            # TURN TLS port
+            - containerPort: 5349
+              name: turn-tls
+              protocol: TCP
+          env:
+            # LIVEKIT_KEYS overrides the keys in config.yaml
+            # Format: "apiKey: apiSecret"
+            - name: LIVEKIT_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: lootchat-secrets
+                  key: LIVEKIT_KEYS
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lootchat-secrets
+                  key: REDIS_PASSWORD
+          volumeMounts:
+            - name: config
+              mountPath: /etc/livekit
+            - name: turn-tls
+              mountPath: /etc/livekit/turn-tls
+              readOnly: true
+          resources:
+            # Reduced resources for resource-constrained cluster
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1024Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 7880
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 7880
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: config
+          configMap:
+            name: livekit-config
+        - name: turn-tls
+          secret:
+            secretName: livekit-turn-tls
+      # Prefer scheduling on nodes with fast networking
+      tolerations:
+        - key: "node.kubernetes.io/high-bandwidth"
+          operator: "Exists"
+          effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: livekit-service
+  namespace: lootchat
+  labels:
+    app: livekit
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7880
+      targetPort: 7880
+      name: http
+      protocol: TCP
+    - port: 7881
+      targetPort: 7881
+      name: rtc-tcp
+      protocol: TCP
+  selector:
+    app: livekit
+---
+# LoadBalancer service for TURN (UDP traffic needs direct access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: livekit-turn
+  namespace: lootchat
+  labels:
+    app: livekit
+  annotations:
+    load-balancer.hetzner.cloud/location: fsn1
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 3478
+      targetPort: 3478
+      name: turn-udp
+      protocol: UDP
+    - port: 5349
+      targetPort: 5349
+      name: turn-tls
+      protocol: TCP
+  selector:
+    app: livekit
+---
+# Ingress for WebSocket connections (wss://)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: livekit-ingress
+  namespace: lootchat
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+    # WebSocket support - use standard annotations instead of configuration-snippet
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/websocket-services: "livekit-service"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - livekit.yourdomain.com  # Update with your domain
+      secretName: livekit-tls
+  rules:
+    - host: livekit.yourdomain.com  # Update with your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: livekit-service
+                port:
+                  number: 7880
+---
+# Horizontal Pod Autoscaler for LiveKit
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: livekit-hpa
+  namespace: lootchat
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: livekit
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+---
+# NetworkPolicy to allow LiveKit traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: livekit-network-policy
+  namespace: lootchat
+spec:
+  podSelector:
+    matchLabels:
+      app: livekit
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 7880
+    # Allow from backend pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 7880
+    # Allow RTC TCP connections from anywhere (WebRTC)
+    - ports:
+        - protocol: TCP
+          port: 7881
+    # Allow TURN UDP/TLS from anywhere
+    - ports:
+        - protocol: UDP
+          port: 3478
+        - protocol: TCP
+          port: 5349
+    # Allow UDP port range for WebRTC media (50000-60000)
+    # Note: NetworkPolicy doesn't support port ranges, so we allow all UDP
+    # Firewall rules should restrict to the actual port range
+    - ports:
+        - protocol: UDP
+  egress:
+    # Allow to Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow STUN/TURN and external WebRTC connections
+    - ports:
+        - protocol: UDP
+        - protocol: TCP

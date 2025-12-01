@@ -1,0 +1,36 @@
+# SOPS Configuration Example
+# Copy this to .sops.yaml and update with your GPG fingerprint
+#
+# To get your GPG fingerprint:
+# gpg --list-keys
+#
+# Then copy this file:
+# cp .sops.yaml.example .sops.yaml
+# 
+# And update the pgp field with your fingerprint
+
+creation_rules:
+  # Encrypt secrets.yaml file
+  - path_regex: secrets\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    pgp: YOUR_GPG_FINGERPRINT_HERE  # Replace with your actual GPG fingerprint
+    
+    # Example fingerprint format:
+    # pgp: 257FE55DA640258047E315BDA1A93F69AFEE8BD8
+
+# Multiple keys for team access (optional)
+# creation_rules:
+#   - path_regex: secrets\.yaml$
+#     encrypted_regex: ^(data|stringData)$
+#     pgp: >-
+#       FINGERPRINT_USER_1,
+#       FINGERPRINT_USER_2,
+#       FINGERPRINT_USER_3
+
+# Age keys (alternative to GPG)
+# creation_rules:
+#   - path_regex: secrets\.yaml$
+#     encrypted_regex: ^(data|stringData)$
+#     age: >-
+#       age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p,
+#       age1cy0su9fwf3gf9mw868g5yut09p6nytfmccy7xx6mxh0yf3qd6lxqwr7ldq

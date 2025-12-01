@@ -1,0 +1,24 @@
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: lootchat-critical
+value: 1000000
+globalDefault: false
+description: "Critical LootChat services (database, redis, backend)"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: lootchat-high
+value: 100000
+globalDefault: false
+description: "High priority LootChat services (frontend, minio)"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: lootchat-normal
+value: 10000
+globalDefault: true
+description: "Normal priority LootChat services (kafka, monitoring)"

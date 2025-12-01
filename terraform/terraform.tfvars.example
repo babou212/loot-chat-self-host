@@ -1,0 +1,52 @@
+# Hetzner Cloud API Token
+# Get your token from: https://console.hetzner.cloud/
+hcloud_token = "YOUR_HETZNER_CLOUD_API_TOKEN"
+
+# SSH Public Key
+# Generate with: ssh-keygen -t ed25519 -C "your_email@example.com"
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC... your_email@example.com"
+
+# Cluster Configuration
+cluster_name = "lootchat"
+
+# Location (fsn1=Falkenstein, nbg1=Nuremberg, hel1=Helsinki, ash=Ashburn, hil=Hillsboro)
+location = "nbg1"
+
+# Network Configuration
+network_zone    = "eu-central"
+network_cidr    = "10.0.0.0/16"
+subnet_cidr     = "10.0.1.0/24"
+pod_network_cidr = "10.244.0.0/16"
+
+# SSH Access Control
+# Restrict SSH access to your IP for better security
+# Get your IP: curl ifconfig.me
+allowed_ssh_ips = [
+  "0.0.0.0/0",  # Allow from anywhere
+  "::/0"
+]
+
+# Server Types (see: https://www.hetzner.com/cloud)
+# Control Plane: cax21 = 4 vCPU ARM, 8 GB RAM, 80 GB SSD
+control_plane_server_type = "cax21"
+
+# Workers: cax11 = 2 vCPU ARM, 4 GB RAM, 40 GB SSD
+worker_server_type = "cax11"
+
+# Number of worker nodes
+worker_count = 4
+
+# Load Balancer Type
+load_balancer_type = "lb11"
+
+# Kubernetes Version
+kubernetes_version = "1.28.4"
+
+# Storage Volumes (in GB)
+postgres_volume_size = 10
+redis_volume_size    = 10
+uploads_volume_size  = 10
+
+# Cloud Integrations
+enable_ccm = true  # Hetzner Cloud Controller Manager
+enable_csi = true  # Hetzner Cloud Storage Interface

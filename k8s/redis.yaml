@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: lootchat-redis
+  namespace: lootchat
+spec:
+  serviceName: lootchat-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lootchat-redis
+  template:
+    metadata:
+      labels:
+        app: lootchat-redis
+    spec:
+      priorityClassName: lootchat-critical
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: Exists
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: lootchat-secrets
+              key: REDIS_PASSWORD
+        args:
+        - redis-server
+        - --requirepass
+        - $(REDIS_PASSWORD)
+        # Count-based caching: no persistence, LRU eviction
+        - --appendonly
+        - "no"
+        - --save
+        - ""
+        - --maxmemory
+        - 1gb
+        - --maxmemory-policy
+        - allkeys-lru
+        # Connection tuning
+        - --tcp-backlog
+        - "511"
+        - --timeout
+        - "300"
+        - --tcp-keepalive
+        - "300"
+        # Performance optimizations
+        - --hz
+        - "10"
+        - --dynamic-hz
+        - "yes"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        ports:
+        - containerPort: 6379
+          name: redis
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -a $REDIS_PASSWORD ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -a $REDIS_PASSWORD ping
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+      - name: redis-exporter
+        image: oliver006/redis_exporter:latest
+        ports:
+        - containerPort: 9121
+          name: metrics
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: lootchat-secrets
+              key: REDIS_PASSWORD
+        - name: REDIS_ADDR
+          value: "localhost:6379"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lootchat-redis
+  namespace: lootchat
+  labels:
+    app: lootchat-redis
+spec:
+  clusterIP: None
+  selector:
+    app: lootchat-redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  - port: 9121
+    targetPort: 9121
+    name: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-metrics
+  namespace: lootchat
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: lootchat-redis
+  endpoints:
+  - port: metrics
+    interval: 30s

@@ -1,0 +1,174 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: lootchat-kafka
+  namespace: lootchat
+spec:
+  serviceName: lootchat-kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lootchat-kafka
+  template:
+    metadata:
+      labels:
+        app: lootchat-kafka
+    spec:
+      priorityClassName: lootchat-critical
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: Exists
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:latest
+        ports:
+        - containerPort: 9092
+          name: plaintext
+        - containerPort: 9093
+          name: controller
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+        env:
+        - name: KAFKA_NODE_ID
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_NODE_ID
+        - name: KAFKA_PROCESS_ROLES
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_PROCESS_ROLES
+        - name: KAFKA_LISTENERS
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_LISTENERS
+        - name: KAFKA_ADVERTISED_LISTENERS
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_ADVERTISED_LISTENERS
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_INTER_BROKER_LISTENER_NAME
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_CONTROLLER_LISTENER_NAMES
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_CONTROLLER_QUORUM_VOTERS
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+        - name: CLUSTER_ID
+          valueFrom:
+            configMapKeyRef:
+              name: lootchat-config
+              key: CLUSTER_ID
+        - name: KAFKA_LOG_DIRS
+          value: /var/lib/kafka/data
+        - name: JMX_PORT
+          value: "9999"
+        - name: KAFKA_JMX_HOSTNAME
+          value: "localhost"
+        - name: KAFKA_OPTS
+          value: "-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.rmi.port=9999"
+      - name: jmx-exporter
+        image: bitnami/jmx-exporter:latest
+        ports:
+        - containerPort: 5556
+          name: metrics
+        env:
+        - name: JMX_PORT
+          value: "9999"
+        - name: SERVICE_PORT
+          value: "5556"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: kafka-data
+        persistentVolumeClaim:
+          claimName: kafka-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lootchat-kafka
+  namespace: lootchat
+  labels:
+    app: lootchat-kafka
+spec:
+  clusterIP: None
+  selector:
+    app: lootchat-kafka
+  ports:
+  - port: 9092
+    targetPort: 9092
+    name: plaintext
+  - port: 9093
+    targetPort: 9093
+    name: controller
+  - port: 5556
+    targetPort: 5556
+    name: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kafka-metrics
+  namespace: lootchat
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: lootchat-kafka
+  endpoints:
+  - port: metrics
+    interval: 30s

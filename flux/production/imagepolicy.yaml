@@ -1,0 +1,30 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: lootchat-backend
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: lootchat-backend
+  filterTags:
+    pattern: '^master-[a-f0-9]+-(?P<timestamp>[0-9]+)$'
+    extract: '$timestamp'
+  policy:
+    numerical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: lootchat-frontend
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: lootchat-frontend
+  filterTags:
+    pattern: '^master-[a-f0-9]+-(?P<timestamp>[0-9]+)$'
+    extract: '$timestamp'
+  policy:
+    numerical:
+      order: asc
